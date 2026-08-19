@@ -1,0 +1,190 @@
+{
+  "name": "Recruit Swarm — Oracle (sub-workflow)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0001-4e5f-8a9b-000000000001",
+      "name": "When Executed by Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-6"
+        },
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "id": "a1b2c3d4-0002-4e5f-8a9b-000000000002",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        -360,
+        224
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_WITH_YOUR_ANTHROPIC_CRED_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"requesting_agent\": \"ATLAS\",\n  \"query_summary\": \"Offer acceptance rates for mid-market SaaS, senior IC roles\",\n  \"source_tier\": \"1\",\n  \"retrieved_at\": \"2025-01-01T00:00:00Z\",\n  \"data_points\": [\n    {\n      \"metric\": \"offer_acceptance_rate\",\n      \"value\": \"72%\",\n      \"source\": \"Gem State of Recruiting 2025\",\n      \"section\": \"2.1\",\n      \"confidence\": \"HIGH\"\n    }\n  ],\n  \"application_notes\": \"Filter to 200-500 headcount band; senior IC proxy used.\",\n  \"warnings\": [],\n  \"handoff_block\": {\n    \"MARKET_BENCHMARKS\": {\n      \"offer_acceptance_by_level\": {},\n      \"time_to_fill_days\": null,\n      \"comp_trend\": \"\",\n      \"supply_indicators\": \"\",\n      \"market_split\": \"\",\n      \"decline_reasons\": []\n    },\n    \"EMAIL_BENCHMARKS\": {\n      \"open_rate\": null,\n      \"reply_rate\": null,\n      \"interested_rate\": null,\n      \"best_send_times\": \"\",\n      \"subject_patterns\": [],\n      \"cadence_days\": null,\n      \"personalization_lift\": \"\"\n    },\n    \"PIPELINE_BENCHMARKS\": {\n      \"stage_passthrough_rates\": {},\n      \"volume_per_hire\": null,\n      \"top_channels_by_yield\": [],\n      \"touchpoints_to_reply\": null,\n      \"rediscovery_rate\": null\n    },\n    \"VALIDATION_BENCHMARKS\": {\n      \"acceptable_ranges\": {},\n      \"role_family_note\": \"\"\n    },\n    \"INDUSTRY_METRICS\": {\n      \"growth_indicators\": \"\",\n      \"market_split\": \"\",\n      \"availability\": \"\",\n      \"comp_benchmarks\": {},\n      \"key_stats\": []\n    },\n    \"INTERVIEW_BENCHMARKS\": {\n      \"interviews_per_hire\": null,\n      \"assessment_practices\": [],\n      \"candidate_preferences\": [],\n      \"time_in_process_days\": null\n    }\n  },\n  \"not_found\": []\n}"
+      },
+      "id": "a1b2c3d4-0003-4e5f-8a9b-000000000003",
+      "name": "Oracle Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Retrieve recruiting benchmark data for the following request.\n\nrequesting_agent: {{ $json.requesting_agent }}\ndata_needed: {{ $json.data_needed }}\ncontext: {{ JSON.stringify($json.context) }}\n\nSearch the knowledge base and return the structured HANDOFF block now.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "TASK:\nRetrieve specific, targeted recruiting-benchmark data on demand. Extract only the\nrelevant sections — never return full documents. Always cite source, section, and\nconfidence. You are a retrieval agent, not an analyst: return data, not opinions.\n\nKNOWLEDGE BASE (generic, two-tier):\nTIER 1 — `benchmark-reference.md`: curated metrics extracted from public recruiting\nindustry reports (2025-2026 vintage), organized into indexed sections:\n1. Labor Market & HR Trends   2. Talent Acquisition & Pipeline\n3. Recruitment Marketing & Cost   4. Compensation & Pay Strategy\n5. Technology & AI in Hiring   6. Calibration notes (size-band + role-family proxies)\nTIER 2 — source reports (search only if Tier 1 lacks the metric): the public\nbenchmark reports the reference is built from (e.g. Gem, Joveo, Appcast, Payscale,\nSHRM, CoderPad, ZipRecruiter, and similar). Adopters bring their own report set;\nnone are bundled that aren't theirs to redistribute.\n\n> Calibration is generic: filter by the **size band** and **role family** supplied\n> in `context` (no fixed company proxy). There is no company-specific section.\n\nEXECUTION:\n1. Parse `requesting_agent`, `data_needed`, `context`.\n2. Search `benchmark-reference.md` first; route by topic (email/outreach → §2.8;\n   funnel/passthrough → §2.1-2.6; cost-per-hire → §3; time-to-fill → §2.3;\n   offer acceptance → §2.1-2.5; compensation → §4; AI skills → §4/§5;\n   sourcing channels → §2.9; recruiter capacity → §2.11; labor market → §1).\n   Only search Tier 2 if the reference lacks the metric; state which tier answered.\n3. Filter to the role/industry/seniority/size-band in `context`. Never pad with\n   tangential data.\n4. If the ATS tool is connected and the request is for the user's own funnel/offer\n   data, pull it and label it as live (vs. benchmark).\n\nHANDOFF BLOCK — emit as structured JSON keyed to the requesting agent. Field names\nare contracts (downstream parses them). Provide the matching schema:\n- SHAKESPEARE → `EMAIL_BENCHMARKS` (open/reply/interested rates, send times,\n  subject patterns, cadence, personalization lift)\n- ATLAS → `MARKET_BENCHMARKS` (offer acceptance by level + size band, time-to-fill,\n  comp trend, supply indicators, market split, decline reasons)\n- HUNTER → `PIPELINE_BENCHMARKS` (stage passthrough rates, volume per hire, top\n  channels by yield, touchpoints to reply, rediscovery rate)\n- QA-BOT → `VALIDATION_BENCHMARKS` (acceptable ranges for email + pipeline +\n  offer-acceptance + time-to-fill, role-family note)\n- SENSEI → `INDUSTRY_METRICS` (growth indicators, market split, availability,\n  comp benchmarks, key stats)\n- INTERVIEW-LAB → `INTERVIEW_BENCHMARKS` (interviews per hire, assessment practices,\n  candidate preferences, time-in-process)\n\nCONSTRAINTS:\n- Search the reference first; Tier 2 only on miss.\n- Never fabricate. If neither tier has it: `NOT_FOUND: [request]. Available: [list]`.\n- Max ~500 tokens. Data, not prose.\n- Cite source + section for every data point.\n- Flag `DATA_VINTAGE_WARNING` if a data point is >12 months old; suggest a live\n  web/ATS supplement.\n- If a metric conflicts across sources, return both with attribution and flag\n  `CONFLICT`.\n- Nothing here is company-specific. All calibration comes from `context`."
+        }
+      },
+      "id": "a1b2c3d4-0004-4e5f-8a9b-000000000004",
+      "name": "Oracle AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1b2c3d4-0005-4e5f-8a9b-000000000005",
+              "name": "oracle_response",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "a1b2c3d4-0006-4e5f-8a9b-000000000006",
+              "name": "requesting_agent",
+              "value": "={{ $('When Executed by Orchestrator').item.json.requesting_agent }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-0007-4e5f-8a9b-000000000007",
+              "name": "handoff_block",
+              "value": "={{ $json.output.handoff_block }}",
+              "type": "object"
+            },
+            {
+              "id": "a1b2c3d4-0008-4e5f-8a9b-000000000008",
+              "name": "not_found",
+              "value": "={{ $json.output.not_found }}",
+              "type": "array"
+            },
+            {
+              "id": "a1b2c3d4-0009-4e5f-8a9b-000000000009",
+              "name": "warnings",
+              "value": "={{ $json.output.warnings }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0010-4e5f-8a9b-000000000010",
+      "name": "Return HANDOFF to Orchestrator",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Oracle Sub-Workflow\n\nCalled by the Recruit Swarm Orchestrator.\n\n**Inputs (from Execute Workflow trigger):**\n- `requesting_agent` — which specialist is asking (ATLAS, SENSEI, HUNTER, etc.)\n- `data_needed` — free-text description of the benchmark data required\n- `context` — JSON: role_family, seniority, size_band, industry\n\n**Returns:**\n- `handoff_block` — keyed HANDOFF JSON (EMAIL_BENCHMARKS, MARKET_BENCHMARKS, etc.)\n- `not_found` — list of metrics not in the KB\n- `warnings` — DATA_VINTAGE_WARNING / CONFLICT flags\n\n**Setup:**\n1. Set your Anthropic credential on the Anthropic Chat Model node.\n2. Optionally attach a vector store tool to the Oracle AI Agent node pointing at your benchmark-reference.md.\n3. Optionally attach an ATS HTTP tool for live funnel/offer data.\n\nThis sub-workflow must be imported and saved BEFORE importing the orchestrator.",
+        "height": 480,
+        "width": 480,
+        "color": 4
+      },
+      "id": "a1b2c3d4-0011-4e5f-8a9b-000000000011",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        -480
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Oracle AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Oracle AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Oracle Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Oracle AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Oracle AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Return HANDOFF to Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  }
+}

@@ -1,0 +1,624 @@
+{
+  "name": "Recruit Swarm — Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recruit-swarm-orchestrator",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "b1c2d3e4-0001-4f6a-9b0c-100000000001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "webhookId": "recruit-swarm-orch-webhook-v1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-6"
+        },
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "id": "b1c2d3e4-0002-4f6a-9b0c-100000000002",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        -960,
+        224
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_WITH_YOUR_ANTHROPIC_CRED_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User request:\n{{ $json.body.request || $json.request }}\n\nOrg profile:\n{{ JSON.stringify($json.body.org_profile || $json.org_profile || {}) }}\n\nExisting assets (if any):\n{{ JSON.stringify($json.body.existing_assets || $json.existing_assets || {}) }}\n\nClassify the request and determine the chain scope. Return structured JSON with: request_category (SINGLE_TASK|CAMPAIGN|REVIEW|HYBRID), chain_scope (array of specialist names in run order, always ending with QA-Bot), stop_point (last content specialist), and routing_rationale.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "TASK:\nYou orchestrate an 8-specialist recruiting network. You interpret the user's\nrequest, decide which specialists run and in what scope, pass structured HANDOFF\ndata between them in a fixed order, and assemble the final deliverable. No\nspecialist runs without your dispatch.\n\nORG PROFILE (provided per run — this replaces any hardcoded company context):\n```\ncompany:        [name]                 # the hiring company\nindustry:       [industry/sector]\nsize_band:      [headcount band, e.g. 200-500]\ncomp_posture:   [AGGRESSIVE | STANDARD | SELECTIVE]\nlocations:      [primary hiring locations]\nwork_auth:      [optional filter, e.g. \"US work authorization required\" — omit if none]\nnotes:          [optional: mission, culture, known competitors, constraints]\n```\nIf the org profile is missing fields a specialist needs, ask the user once, then\nproceed. Never invent company-specific facts.\n\nROSTER + FIXED CHAIN:\n`Oracle → Sensei → Atlas → JD-Bot → [Interview-Lab] → Hunter → Shakespeare → QA-Bot`\nInterview-Lab runs only when interview planning is requested. QA-Bot always runs\nlast on every request.\n\nSTEP 1 — Classify the request:\n| Category | Signal | Action |\n|---|---|---|\n| SINGLE_TASK | \"just the JD\", \"only outreach\", \"interview questions for\" | run chain up to the requested specialist + QA-Bot |\n| CAMPAIGN | \"full package\", \"end-to-end\", \"everything for\" | run the full chain |\n| REVIEW | \"update the\", \"refresh the\", \"revise existing\" | take the user's existing asset, run upstream only as needed to refresh it |\n| HYBRID | \"[asset] and [asset]\" | run up to the last requested specialist + QA-Bot |\nIf ambiguous, ask before dispatching.\n\nSTEP 2 — Choose chain scope (stop-point by requested asset):\n| User wants | Runs through | Delivers |\n|---|---|---|\n| Role brief | Oracle → Sensei → QA-Bot | Sensei |\n| Talent map | Oracle → Sensei → Atlas → QA-Bot | Atlas |\n| Job description | …→ JD-Bot → QA-Bot | JD-Bot |\n| Interview plan | …→ JD-Bot → Interview-Lab → QA-Bot | Interview-Lab |\n| Sourcing strategy | …→ JD-Bot → Hunter → QA-Bot | Hunter |\n| Outreach campaign | …→ Hunter → Shakespeare → QA-Bot | Shakespeare |\n| Full campaign | full chain (Interview-Lab only if interviews requested) | all |\n\nSTEP 3 — Execute. Run specialists in order. After each:\n1. capture its HANDOFF block (structured JSON),\n2. pass ONLY the relevant HANDOFF sections to the next specialist (not full output),\n3. show a progress line, e.g. `[Oracle ✓] → [Sensei ✓] → [Atlas …] → …`.\nRun un-requested upstream specialists internally (HANDOFF only, output not shown).\n\nSTEP 4 — QA-Bot last. SINGLE_TASK: validate the one asset. CAMPAIGN: validate all +\ncross-asset consistency (role title, skills JD↔interview, target companies\nAtlas↔Hunter, messaging Hunter↔Shakespeare).\n\nSTEP 5 — Assemble. Present delivered assets under clear headers with a status +\nQA-result table. If the user supplied an asset directly (e.g. \"I already have a\nJD\"), use it in place of that specialist and skip it.\n\nRULES:\n- Pass only the specific HANDOFF sections each specialist needs.\n- Never fabricate a specialist's output. If one hasn't run, mark \"Not executed\".\n- If a specialist errors, stop the chain, report it, ask: retry or supply data manually.\n- Oracle never blocks: if it returns NOT_FOUND, note the gap and continue\n  (downstream specialists have defaults).\n- Nothing in this prompt is company-specific. All company context comes from the\n  org profile or the user."
+        }
+      },
+      "id": "b1c2d3e4-0003-4f6a-9b0c-100000000003",
+      "name": "Orchestrator AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"request_category\": \"CAMPAIGN\",\n  \"chain_scope\": [\"Oracle\", \"Sensei\", \"Atlas\", \"JD-Bot\", \"Hunter\", \"Shakespeare\", \"QA-Bot\"],\n  \"stop_point\": \"Shakespeare\",\n  \"routing_rationale\": \"User requested a full outreach campaign end-to-end.\",\n  \"org_profile\": {\n    \"company\": \"string\",\n    \"industry\": \"string\",\n    \"size_band\": \"string\",\n    \"comp_posture\": \"STANDARD\",\n    \"locations\": \"string\",\n    \"work_auth\": \"\",\n    \"notes\": \"\"\n  },\n  \"ambiguous\": false,\n  \"clarification_needed\": \"\"\n}"
+      },
+      "id": "b1c2d3e4-0004-4f6a-9b0c-100000000004",
+      "name": "Orchestrator Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -740,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "chain-oracle-only",
+                    "leftValue": "={{ $json.output.stop_point }}",
+                    "rightValue": "Sensei",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "role_brief"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "chain-atlas",
+                    "leftValue": "={{ $json.output.stop_point }}",
+                    "rightValue": "Atlas",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "talent_map"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "chain-jdbot",
+                    "leftValue": "={{ $json.output.stop_point }}",
+                    "rightValue": "JD-Bot",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "job_description"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "chain-hunter",
+                    "leftValue": "={{ $json.output.stop_point }}",
+                    "rightValue": "Hunter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sourcing_strategy"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "chain-full",
+                    "leftValue": "={{ $json.output.stop_point }}",
+                    "rightValue": "Shakespeare",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "full_campaign"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "b1c2d3e4-0005-4f6a-9b0c-100000000005",
+      "name": "Chain Scope Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_ORACLE_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "data_needed": "=Retrieve benchmarks for: {{ $('Orchestrator AI Agent').item.json.output.stop_point }}. Role: {{ $('Webhook Trigger').item.json.body.role || '' }}.",
+            "context": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0006-4f6a-9b0c-100000000006",
+      "name": "Call Oracle",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -460,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SENSEI_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "org_profile": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}",
+            "role_request": "={{ $('Webhook Trigger').item.json.body.request || $('Webhook Trigger').item.json.request }}",
+            "oracle_handoff": "={{ $('Call Oracle').item.json.handoff_block }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0007-4f6a-9b0c-100000000007",
+      "name": "Call Sensei",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_ATLAS_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "org_profile": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}",
+            "sensei_handoff": "={{ $('Call Sensei').item.json.handoff_block }}",
+            "oracle_handoff": "={{ $('Call Oracle').item.json.handoff_block }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0008-4f6a-9b0c-100000000008",
+      "name": "Call Atlas",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -20,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_JDBOT_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "org_profile": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}",
+            "sensei_handoff": "={{ $('Call Sensei').item.json.handoff_block }}",
+            "atlas_handoff": "={{ $('Call Atlas').item.json.handoff_block }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0009-4f6a-9b0c-100000000009",
+      "name": "Call JD-Bot",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_HUNTER_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "org_profile": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}",
+            "sensei_handoff": "={{ $('Call Sensei').item.json.handoff_block }}",
+            "atlas_handoff": "={{ $('Call Atlas').item.json.handoff_block }}",
+            "jdbot_handoff": "={{ $('Call JD-Bot').item.json.handoff_block }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0010-4f6a-9b0c-100000000010",
+      "name": "Call Hunter",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_SHAKESPEARE_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "org_profile": "={{ $('Orchestrator AI Agent').item.json.output.org_profile }}",
+            "atlas_handoff": "={{ $('Call Atlas').item.json.handoff_block }}",
+            "hunter_handoff": "={{ $('Call Hunter').item.json.handoff_block }}",
+            "oracle_handoff": "={{ $('Call Oracle').item.json.handoff_block }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0011-4f6a-9b0c-100000000011",
+      "name": "Call Shakespeare",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_QABOT_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requesting_agent": "=ORCHESTRATOR",
+            "chain_scope": "={{ $('Orchestrator AI Agent').item.json.output.chain_scope }}",
+            "request_category": "={{ $('Orchestrator AI Agent').item.json.output.request_category }}",
+            "all_handoffs": "={{ { oracle: $('Call Oracle').item.json.handoff_block, sensei: $('Call Sensei').item.json.handoff_block, atlas: $('Call Atlas').item.json.handoff_block, jdbot: $('Call JD-Bot').item.json.handoff_block, hunter: $('Call Hunter').item.json.handoff_block, shakespeare: $('Call Shakespeare').item.json.handoff_block } }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b1c2d3e4-0012-4f6a-9b0c-100000000012",
+      "name": "Call QA-Bot (always last)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble the final deliverable from all specialist HANDOFF outputs.\n// QA-Bot always runs last; its report is included regardless of chain scope.\n\nconst orch = $('Orchestrator AI Agent').item.json.output;\nconst chainScope = Array.isArray(orch.chain_scope) ? orch.chain_scope : [];\nconst category = orch.request_category || 'UNKNOWN';\nconst stopPoint = orch.stop_point || 'unknown';\n\n// Safely read each specialist result (may be null if not in scope).\nconst safeGet = (nodeName, key) => {\n  try { return $node[nodeName] ? $node[nodeName].json[key] : null; }\n  catch (e) { return null; }\n};\n\nconst qaResult = $('Call QA-Bot (always last)').item.json;\n\n// Build status table rows.\nconst specialistNodes = [\n  { name: 'Oracle', node: 'Call Oracle' },\n  { name: 'Sensei', node: 'Call Sensei' },\n  { name: 'Atlas', node: 'Call Atlas' },\n  { name: 'JD-Bot', node: 'Call JD-Bot' },\n  { name: 'Hunter', node: 'Call Hunter' },\n  { name: 'Shakespeare', node: 'Call Shakespeare' },\n];\nconst statusRows = specialistNodes.map(s => {\n  const inScope = chainScope.includes(s.name);\n  return { specialist: s.name, status: inScope ? 'executed' : 'not_in_scope' };\n});\nstatusRows.push({ specialist: 'QA-Bot', status: 'executed (always)' });\n\nreturn [{\n  json: {\n    request_category: category,\n    chain_scope: chainScope,\n    stop_point: stopPoint,\n    routing_rationale: orch.routing_rationale || '',\n    status_table: statusRows,\n    qa_report: qaResult || {},\n    assembled_at: new Date().toISOString(),\n    note: 'Full deliverable: inspect each Call <Specialist> node output for specialist assets and HANDOFF blocks.',\n  }\n}];\n"
+      },
+      "id": "b1c2d3e4-0013-4f6a-9b0c-100000000013",
+      "name": "Assemble Deliverable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Recruit Swarm — Orchestrator\n\nClassifies the request, routes through the correct chain slice,\nand always runs QA-Bot last.\n\n**Import order:** sub-oracle.json first, then this file.\nAfter import, replace all REPLACE_WITH_*_WORKFLOW_ID values\nwith the actual n8n workflow IDs of each sub-workflow.\n\n**Inputs (POST body):**\n- `request` — the recruiter's natural-language ask\n- `org_profile` — company, industry, size_band, comp_posture, locations, work_auth, notes\n- `existing_assets` — optional; any pre-existing JD, outreach copy, etc.\n- `role` — optional shorthand for the role title\n\n**Chain scope outputs (Switch node):**\n- role_brief  → runs Oracle + Sensei + QA-Bot\n- talent_map  → + Atlas\n- job_description → + JD-Bot\n- sourcing_strategy → + Hunter\n- full_campaign → + Shakespeare\n(extra/fallback = full_campaign)\n\n**Credential:** set Anthropic account on Anthropic Chat Model node.\n\n**Other 7 sub-workflows** follow the same pattern as sub-oracle.json\nand are pending review before shipping.",
+        "height": 560,
+        "width": 500,
+        "color": 4
+      },
+      "id": "b1c2d3e4-0014-4f6a-9b0c-100000000014",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1240,
+        -560
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Orchestrator AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestrator AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Chain Scope Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chain Scope Switch": {
+      "main": [
+        [
+          {
+            "node": "Call Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Oracle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Oracle": {
+      "main": [
+        [
+          {
+            "node": "Call Sensei",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Sensei": {
+      "main": [
+        [
+          {
+            "node": "Call Atlas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Atlas": {
+      "main": [
+        [
+          {
+            "node": "Call JD-Bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call JD-Bot": {
+      "main": [
+        [
+          {
+            "node": "Call Hunter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Hunter": {
+      "main": [
+        [
+          {
+            "node": "Call Shakespeare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Shakespeare": {
+      "main": [
+        [
+          {
+            "node": "Call QA-Bot (always last)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call QA-Bot (always last)": {
+      "main": [
+        [
+          {
+            "node": "Assemble Deliverable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": ""
+  }
+}
