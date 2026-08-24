@@ -17,9 +17,9 @@ The roster covers market intelligence, role comprehension, sourcing, outreach,
 JD writing, interview design, and more.
 
 ### [`n8n-swarm/`](n8n-swarm/README.md)
-The same recruiting roster wired as an autonomous n8n pipeline (agents-as-tools).
-A single webhook starts the run and the agents hand work to each other end to
-end, delivering a finished result. This is the orchestrated ("DAG") variant.
+The same recruiting roster wired as an automated n8n pipeline: one request kicks
+it off, the agents hand work to each other end to end, and a finished result comes
+out. This is the hands-off, end-to-end variant (the "DAG" in the name).
 
 ## Which one to use
 
@@ -46,5 +46,5 @@ own delivery format (chat or email).
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The roster is generic by construction: no real
-candidate, company, or hiring data, and no API keys.
+MIT, see [LICENSE](LICENSE). Provided as-is, with no warranty. The roster is
+generic by construction: no real candidate, company, or hiring data, and no API keys.
