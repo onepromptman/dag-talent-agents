@@ -26,7 +26,7 @@ workflow-ID wiring, no separate sub-workflow files to import in order.**
    brief for a Senior Backend Engineer at a 300-person fintech"*). The webhook
    returns immediately (`onReceived`); the deliverable arrives by email.
 
-### Notes / limits (validated live on n8n Cloud)
+### Notes / limits
 - **Scope your request.** Each specialist hop is ~30s. Scoped asks (2–4
   specialists: a brief, a JD, a talent map, a sourcing strategy) run comfortably.
   A single *full 8-specialist campaign* can approach n8n's ~5-min AI-Agent

@@ -2,9 +2,8 @@
 
 A generic, importable n8n implementation of an 8-specialist recruiting agent
 network with an orchestrator that classifies the request and runs the right slice
-of a fixed specialist chain. This is the modernized, brand-agnostic successor to the
-original Gemini/AgentSpace prompt swarm (kept as reference in
-`samples/a2a-recruit-swarm/`).
+of a fixed specialist chain. This is the modernized, brand-agnostic successor to an
+earlier Gemini/AgentSpace prompt swarm.
 
 ## What changed from the original swarm
 
@@ -78,7 +77,7 @@ gem3.2). The orchestrator passes only the relevant sections forward — never fu
 outputs. Schemas live in `prompts/<agent>.md` and are mirrored in each sub-workflow.
 
 ## ATS connector (optional)
-When the A8 connector (`samples/ats-connector`, Greenhouse + Lever) is available,
+When an ATS connector (Greenhouse / Lever) is available,
 Atlas/Hunter/Oracle/QA-Bot get it as an MCP/HTTP **tool** for live reqs, funnel, and
 historical data. Until then specialists degrade gracefully and ask the user for the
 inputs they'd otherwise pull. Connector credentials live in n8n's credential store.
@@ -94,6 +93,3 @@ ship v1 without it and add as an enhancement — note it, don't silently drop it
 3. orchestrator workflow JSON + ONE specialist sub-workflow (Oracle) as the n8n exemplar → review
 4. remaining specialist sub-workflows
 5. README/setup/import docs, manifest, publish dry-run SCAN CLEAN
-
-Reconcile steps 3-4 with Lane B's ingested `n8n-recruit-orchestrator` (its node
-patterns are the reference base).

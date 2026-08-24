@@ -1,4 +1,4 @@
-# TA Expert Agents
+# DAG Talent Agents — Claude Projects & Custom GPTs
 
 A roster of **standalone, single-job expert agents** for recruiters and Talent
 Acquisition teams. Each one runs on its own — no setup, no other agents required —

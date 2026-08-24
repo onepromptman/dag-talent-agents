@@ -49,7 +49,7 @@ Email Deliverable ── Gmail (sends the orchestrator's final output)
 2. **AI-Agent ~5-min execution timeout.** Each specialist hop is ~30s, so a *full
    8-specialist campaign* in one request can approach the limit. → The orchestrator
    is prompted to **scope** the chain; scoped requests (2–4 specialists) are the
-   validated sweet spot. Split a full campaign into a couple of requests.
+   recommended sweet spot. Split a full campaign into a couple of requests.
 3. **`maxIterations`.** The orchestrator's tool-call loop is set to **25** so complex
    multi-tool requests don't hit the iteration cap.
 4. **No `$env` on Cloud.** All secrets are credentials, never env vars or inline keys.
